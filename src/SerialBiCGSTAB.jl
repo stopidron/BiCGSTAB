@@ -25,10 +25,10 @@ end
 function initialize_state(A, b; tol=1e-8, max_iter=30)
   T = eltype(b)
   n = length(b)
-  x = zeros(T, n) #similar(b) maybe 
-  r = b - A * x #mul!()
+  x = zeros(T,n) 
+  r = b - A * x 
   return BiCGSTAB(
-      A, b, x, r, rand(T,n), #maybe do similar(b) here if it saves memory idk 
+      A, b, x, r, rand(T,n), 
       zeros(T, n), zeros(T, n),
       zeros(T, n), zeros(T, n), zeros(T, n),
       one(T), one(T), one(T),
@@ -52,7 +52,7 @@ function step!(state, iter)
 
   rho_new = dot(r_hat, r)
   if abs(rho_new) < 1e-14
-      error("Breakdown: rho_new == 0")
+      error("rho_new == 0")
   end
 
   update_p!(state, rho_new, iter) 
@@ -86,7 +86,7 @@ function solve_bicgstab!(state)
     println("Initial guess is already within tolerance.")
     return state.x, 0 
   end
-  for i in 1:state.max_iter #aaaaaaa noo iteration split each iteration to a proccess idek
+  for i in 1:state.max_iter 
       if step!(state, i)
           println("Converged at step $i")
           return state.x, i
@@ -96,10 +96,3 @@ function solve_bicgstab!(state)
   return state.x, state.max_iter
 end
 end
-
-# parallel 
-# Extract sxs of the matrix, expected ranks
-# give ghost alues to x using A
-# b doesn't need ghost values
-# homework: try to run in parallel using mpi: look at documentation
-# implement solver interface bc how user friendly is it, highly recommended 😱
