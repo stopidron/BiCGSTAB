@@ -1,4 +1,4 @@
 using Test
-include("../src/SerialBiCGSTAB.jl")
-using .SerialBiCGSTAB
+include("../src/bicgstab.jl")
+using .bicgstab
 include("test_bicgstab.jl")
