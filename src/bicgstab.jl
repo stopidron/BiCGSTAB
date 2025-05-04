@@ -63,7 +63,7 @@ function update_p!(state, rho_new, iter)
   else
       beta = (rho_new / state.rho_old) * (state.alpha / state.omega)
 
-      tmp = state.p #temp = step.p 
+      tmp = copy(state.p) #temp = step.p 
       LinearAlgebra.axpy!(-state.omega, state.v, tmp) #tmp = -o*v+p
       copyto!(state.p, state.r) #p=r
       LinearAlgebra.axpy!(beta, tmp, state.p) #p (aka r) =beta*tmp + p 
@@ -83,8 +83,15 @@ function step!(state, iter)
       error("rho_new == 0")
   end
 
-  update_p!(state, rho_new, iter) 
-  state.v .= A * state.p
+  update_p!(state, rho_new, iter)
+  #state.v .= A * state.p
+  mul!(state.v, A, state.p)
+  
+  # dot_rhat_v = LinearAlgebra.dot(r_hat, state.v) TODO add
+  # if abs(dot_rhat_v) < 1e-14 # Add a safety check
+  #   error("Breakdown: dot(r_hat, v) is near zero.")
+  # end
+  # state.alpha = rho_new / dot_rhat_v
   
   state.alpha = rho_new / LinearAlgebra.dot(r_hat, state.v)#TODO maybe not needed
   #state.alpha = rho_new / dot(r_hat, state.v) TODO 
@@ -97,14 +104,13 @@ function step!(state, iter)
   LinearAlgebra.axpy!(-state.alpha, state.v, state.s)
   #state.s .= state.r .- state.alpha .* state.v TODO
 
-  norm_s = LinearAlgebra.norm(state.s) 
+  norm_s = LinearAlgebra.norm(state.s)
   if norm_s < state.tol
-      copyto!(state.x, state.h)
-      #state.x .= state.h
-      return true 
+    state.x .= state.h
+    return true 
   end
 
-  copyto!(state.t, A*state.s)
+  mul!(state.t, A, state.s)
   #state.t .= A * state.s
 
   denom = LinearAlgebra.dot(state.t, state.t) #TODO
