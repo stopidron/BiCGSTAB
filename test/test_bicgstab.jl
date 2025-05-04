@@ -11,7 +11,9 @@ using ..SerialBiCGSTAB
 
     state = initialize_state(A, b, tol=tol, max_iter=max_iter)
     @time x, iters = solve_bicgstab!(state)
+    println(x, iters)
     x_expected = A \ b
+    println(x_expected)
 
     @test isapprox(x, x_expected; atol=tol*10) 
     @test iters <= max_iter 
