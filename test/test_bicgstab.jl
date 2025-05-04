@@ -27,10 +27,10 @@ PartitionedArrays.with_debug() do distribute
     end
 
     b = pvector(row_partition) do my_rows
-        @show typeof(b_global[my_rows])
+        #@show typeof(b_global[my_rows])
         (b_global[my_rows])  #TODO
     end
-    @show eltype(b)
+    #@show eltype(b)
 
     state = initialize_state(A, b; tol=1e-9, max_iter=10)
     x, iters = solve_bicgstab!(state)
