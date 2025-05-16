@@ -1,4 +1,4 @@
-name = "SerialBiCGSTAB"
+name = "bicgstab"
 uuid = "4cf505f6-7563-4d97-a0ae-30db378a853e"
 version = "0.1.0"
 
