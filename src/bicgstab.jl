@@ -5,7 +5,7 @@ export solve_bicgstab!, initialize_state
 using PartitionedArrays
 using LinearAlgebra
 
-mutable struct BiCGSTAB{Tval, TA <: PSparseMatrix, TVec <: PVector}
+mutable struct BiCGSTAB{Tval, TA <: AbstractMatrix, TVec <: AbstractVector}
   A::TA
   b::TVec
   x::TVec
@@ -23,7 +23,7 @@ mutable struct BiCGSTAB{Tval, TA <: PSparseMatrix, TVec <: PVector}
   max_iter::Int
 end
 
-function initialize_state(A::PSparseMatrix, b::PVector; tol=1e-8, max_iter=30) # where T
+function initialize_state(A::AbstractMatrix, b::AbstractVector; tol=1e-8, max_iter=30) # where T
 
   T = eltype(A) 
   @assert eltype(b) == T 
@@ -33,7 +33,8 @@ function initialize_state(A::PSparseMatrix, b::PVector; tol=1e-8, max_iter=30) #
   #r .-= A * x :not needed
 
   #r_hat = prand(b)
-  partition_info = axes(b, 1) ;r_hat = prand(T,partition_info)
+  r_hat = similar(b, T)
+  copyto!(r_hat, b)
 
 
   p     = similar(b, T); p .= zero(T)
@@ -56,6 +57,7 @@ function initialize_state(A::PSparseMatrix, b::PVector; tol=1e-8, max_iter=30) #
 end
 
 function update_p!(state, rho_new, iter)
+  println(1)
   if iter == 1
     copyto!(state.p, state.r)
 
@@ -79,13 +81,32 @@ function step!(state, iter)
 
   #rho_new = dot(r_hat, r)
   rho_new = LinearAlgebra.dot(r_hat, r) #TODO maybe not needed
+  if PartitionedArrays.i_am_main(r) # Use any PVector from state for i_am_main
+    println("Iter: $iter, Rank Main: rho_new = $rho_new")
+  end
   if abs(rho_new) < 1e-14
       error("rho_new == 0")
   end
 
   update_p!(state, rho_new, iter)
-  #state.v .= A * state.p
+  println(2)
+
+  #--- Debug print state.p BEFORE mul! ---
+
+  temp_p_debug = PartitionedArrays.collect(state.p)
+  println("DEBUG Iter $iter: state.p BEFORE mul! = $temp_p_debug")
+
+  #----------------------------------------
+  
+
+  # state.v .= A * state.p
   mul!(state.v, A, state.p)
+
+  #---------debug-----------------------------------------------------
+  temp01_debug = PartitionedArrays.collect(state.v)
+  println("DEBUG Iter $iter: state.v after single mul! = $temp01_debug")
+  println(3)
+  #-------------------------------------------------------------------
   
   # dot_rhat_v = LinearAlgebra.dot(r_hat, state.v) TODO add
   # if abs(dot_rhat_v) < 1e-14 # Add a safety check
@@ -95,6 +116,10 @@ function step!(state, iter)
   
   state.alpha = rho_new / LinearAlgebra.dot(r_hat, state.v)#TODO maybe not needed
   #state.alpha = rho_new / dot(r_hat, state.v) TODO 
+
+  if i_am_main(state.r)#TODO 😱😱😱😱😱😱
+    println("Iter: $iter, Rank Main: alpha = $(state.alpha)")
+  end
 
   copyto!(state.h, state.x)
   LinearAlgebra.axpy!(state.alpha, state.p, state.h)
@@ -111,7 +136,7 @@ function step!(state, iter)
   end
 
   mul!(state.t, A, state.s)
-  #state.t .= A * state.s
+  # state.t .= A * state.s
 
   denom = LinearAlgebra.dot(state.t, state.t) #TODO
   if denom == 0.0
@@ -119,6 +144,11 @@ function step!(state, iter)
   end
 
   state.omega = LinearAlgebra.dot(state.t, state.s) / denom #TODO
+
+  if i_am_main(state.r)#TODO 😱😱😱😱😱😱
+    println("Iter: $iter, Rank Main: omega = $(state.omega)")
+  end
+    
 
   copyto!(state.x, state.h)
   LinearAlgebra.axpy!(state.omega, state.s, state.x)
