@@ -42,6 +42,14 @@ function create_distr_matrix(A::Matrix{Float64}, ranks; assembled)
         assembled=assembled)
 
     A = fetch(t)
+
+    println("HELLOOOO")
+    display(A.matrix_partition)
+    display(local_values(A))
+    display(own_own_values(A))
+    display(ghost_own_values(A))
+    display(ghost_ghost_values(A))
+
     return A
 end
 
@@ -119,7 +127,7 @@ end
         b_global = [1.0, -2.0, 0.0]
 
         A = create_distr_matrix(A_global, ranks; assembled=false)
-        b= create_pvector(b_global, A)
+        b = create_pvector(b_global, A)
 
         state = initialize_state(A, b, tol=tol, max_iter=max_iter)
         x, iters = solve_bicgstab!(state)
