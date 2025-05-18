@@ -57,7 +57,6 @@ function initialize_state(A::AbstractMatrix, b::AbstractVector; tol=1e-8, max_it
 end
 
 function update_p!(state, rho_new, iter)
-  println(1)
   if iter == 1
     copyto!(state.p, state.r)
 
@@ -81,20 +80,19 @@ function step!(state, iter)
 
   #rho_new = dot(r_hat, r)
   rho_new = LinearAlgebra.dot(r_hat, r) #TODO maybe not needed
-  if PartitionedArrays.i_am_main(r) # Use any PVector from state for i_am_main
-    println("Iter: $iter, Rank Main: rho_new = $rho_new")
-  end
+  # if PartitionedArrays.i_am_main(r) # Use any PVector from state for i_am_main
+  #   println("Iter: $iter, Rank Main: rho_new = $rho_new")
+  # end
   if abs(rho_new) < 1e-14
       error("rho_new == 0")
   end
 
   update_p!(state, rho_new, iter)
-  println(2)
 
   #--- Debug print state.p BEFORE mul! ---
 
-  temp_p_debug = PartitionedArrays.collect(state.p)
-  println("DEBUG Iter $iter: state.p BEFORE mul! = $temp_p_debug")
+  # temp_p_debug = PartitionedArrays.collect(state.p)
+  # println("DEBUG Iter $iter: state.p BEFORE mul! = $temp_p_debug")
 
   #----------------------------------------
   
@@ -103,9 +101,9 @@ function step!(state, iter)
   mul!(state.v, A, state.p)
 
   #---------debug-----------------------------------------------------
-  temp01_debug = PartitionedArrays.collect(state.v)
-  println("DEBUG Iter $iter: state.v after single mul! = $temp01_debug")
-  println(3)
+  # temp01_debug = PartitionedArrays.collect(state.v)
+  # println("DEBUG Iter $iter: state.v after single mul! = $temp01_debug")
+  # println(3)
   #-------------------------------------------------------------------
   
   # dot_rhat_v = LinearAlgebra.dot(r_hat, state.v) TODO add
@@ -117,9 +115,9 @@ function step!(state, iter)
   state.alpha = rho_new / LinearAlgebra.dot(r_hat, state.v)#TODO maybe not needed
   #state.alpha = rho_new / dot(r_hat, state.v) TODO 
 
-  if i_am_main(state.r)#TODO 😱😱😱😱😱😱
-    println("Iter: $iter, Rank Main: alpha = $(state.alpha)")
-  end
+  # if i_am_main(state.r)#TODO 😱😱😱😱😱😱
+  #   println("Iter: $iter, Rank Main: alpha = $(state.alpha)")
+  # end
 
   copyto!(state.h, state.x)
   LinearAlgebra.axpy!(state.alpha, state.p, state.h)
@@ -145,9 +143,9 @@ function step!(state, iter)
 
   state.omega = LinearAlgebra.dot(state.t, state.s) / denom #TODO
 
-  if i_am_main(state.r)#TODO 😱😱😱😱😱😱
-    println("Iter: $iter, Rank Main: omega = $(state.omega)")
-  end
+  # if i_am_main(state.r)#TODO 😱😱😱😱😱😱
+  #   println("Iter: $iter, Rank Main: omega = $(state.omega)")
+  # end
     
 
   copyto!(state.x, state.h)

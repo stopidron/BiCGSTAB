@@ -8,122 +8,126 @@ using .bicgstab
 
 import PartitionedArrays as PA
 
-np_test=3
-n_matrix_dim = 2
-n=2
-b_global=Float64[1, 2]
+function create_distr_matrix(A::Matrix{Float64}, ranks; assembled)
+    num_global_rows = size(A, 1)
+    num_global_cols = size(A, 2)
 
-#---------make spare matrix -------------------------------------------------
+    row_partition = PA.uniform_partition(ranks, num_global_rows)
+    col_partition = PA.uniform_partition(ranks, num_global_cols)
 
-A_global_data = Float64[4  1;
-                        2  3]
-A_global_csc = SparseArrays.sparse(A_global_data) 
+    display(row_partition)
 
-AI, AJ, AV = findnz(A_global_csc) # AI, AJ are global row/column indices
-num_global_rows = size(A_global_csc, 1)
-num_global_cols = size(A_global_csc, 2)
-@assert n_matrix_dim == num_global_rows
-#-----------------------------------------------------------------------------
+    per_part_coo_triplets = map(row_partition) do row_indices
+        I = Int[]
+        J = Int[]
+        V = eltype(A)[]
 
-#-------pvector construct-----------------------------------------------------
-
-function create_pvector(distribute, b_global, np)
-    ranks = distribute(LinearIndices((np,)))
-    row_partition = uniform_partition(ranks, length(b_global))
-
-    pb = pvector(row_partition) do local_indices_for_part
-        global_indices_in_local_view = local_to_global(local_indices_for_part)
-        return b_global[global_indices_in_local_view]
-    end
-
-    return pb
-end
-
-#---------------------------------------------------------------------------------
-
-@testset "bicgstab solver test" begin
-
-    ranks = PA.DebugArray(LinearIndices((np_test,)))
-    row_partition = uniform_partition(ranks, num_global_rows)
-    col_partition = uniform_partition(ranks, num_global_cols)
-
-    vector_partition_layout = row_partition
-
-    per_part_coo_triplets = map(row_partition) do current_part_row_localindices
-        I_part_global = Int[]
-        J_part_global = Int[]
-        V_part = eltype(A_global_data)[]
-
-        for g_row in PA.own_to_global(current_part_row_localindices)
-            for g_col in 1:num_global_cols
-                val = A_global_data[g_row, g_col]
+        for global_row in PA.own_to_global(row_indices)
+            for global_col in 1:num_global_cols
+                val = A[global_row, global_col]
                 if !iszero(val)
-                    push!(I_part_global, g_row)
-                    push!(J_part_global, g_col)
-                    push!(V_part, val)
+                    push!(I, global_row)
+                    push!(J, global_col)
+                    push!(V, val)
                 end
             end
         end
-        return (I_part_global, J_part_global, V_part)
+        return (I, J, V)
     end
 
     AI, AJ, AV = PA.tuple_of_arrays(per_part_coo_triplets)
+
     t = PA.psparse(AI, AJ, AV,
-                                row_partition, col_partition,
-                                assembled=false, indices=:global)
+        row_partition, col_partition,
+        assembled=assembled)
 
     A = fetch(t)
-    #PA.centralize(A)
-
-    #----------debug------------------------------------
-
-    if PA.i_am_main(ranks)
-        println("DEBUG: Centralized A for inspection = ", PA.centralize(A)) # If available and meaningful
-    end
-    # map(ranks, A.matrix_partition) do rank, local_mat
-    #     println("DEBUG: Rank $rank, local matrix: ", local_mat)
-    # end
-
-    # println("HELLOOOO")
-    # display(A.matrix_partition)
-    # display(local_values(A))
-    # display(own_own_values(A))
-    # display(ghost_own_values(A))
-    # display(ghost_ghost_values(A))
-
-    final_A_col_partition = A.col_partition # Or partition(axes(A,2))
-
-    #----------debug------------------------------------
-
-    @assert length(b_global) == num_global_rows 
-
-    b = pvector(final_A_col_partition) do local_indices_for_part #TODO changed row_partitioned to final_A_col_partition
-        global_indices_in_local_view = local_to_global(local_indices_for_part)
-        return b_global[global_indices_in_local_view]
-    end
-    #collect(b)
-    #----------debug------------------------------------
-    # b_collected = PartitionedArrays.collect(b)
-    # println("DEBUG: Collected PVector b = ", b_collected)
-    #----------debug------------------------------------
-    
-    state = initialize_state(A,b,tol=1e-8,max_iter=30)
-
-    #----------debug------------------------------------
-    # p_initial_collected = PartitionedArrays.collect(state.p)
-    # r_initial_collected = PartitionedArrays.collect(state.r)
-    # r_hat_initial_collected = PartitionedArrays.collect(state.r_hat)
-
-    # println("DEBUG: Initial state.p (after initialize_state) = ", p_initial_collected)
-    # println("DEBUG: Initial state.r (after initialize_state) = ", r_initial_collected)
-    # println("DEBUG: Initial state.r_hat (after initialize_state) = ", r_hat_initial_collected)  
-    #----------debug------------------------------------
-    x, iter = solve_bicgstab!(state)
-
-    tol=1e-8
-
-    x_vec = collect(x)
-    expected = A_global_data \ b_global
-    @test isapprox(x_vec, expected; atol=tol, rtol=0)
+    return A
 end
-#--------------------------------------------------------------------------------------
+
+function create_pvector(b::Vector{Float64}, A::PA.PSparseMatrix)
+    col_A = A.col_partition
+
+    pv = pvector(col_A) do local_indices_for_part
+        global_indices_in_local_view = PA.local_to_global(local_indices_for_part)
+        return b[global_indices_in_local_view]
+    end
+    return pv
+end
+
+@testset "bicgstab solver" begin
+    np_test = 2
+    ranks = PA.DebugArray(LinearIndices((np_test,)))
+    tol = 1e-8
+    max_iter = 30
+
+    @testset "Test 1: 2x2 system" begin
+        b_global = Float64[1, 2]
+        A_global = Float64[4 1; 2 3]
+
+        A = create_distr_matrix(A_global, ranks; assembled=false)
+        b = create_pvector(b_global, A)
+
+        @assert size(A_global, 2) == length(b_global)
+
+        state = initialize_state(A, b, tol=1e-8, max_iter=30)
+        x, iter = solve_bicgstab!(state)
+        tol = 1e-8
+        x_vec = collect(x)
+        expected = A_global \ b_global
+        @test isapprox(x_vec, expected; atol=tol, rtol=0)
+    end
+
+    @testset "Test 2: 2x2 system" begin
+        b_global = Float64[1, 1]
+        A_global = Float64[3 1; 1 2]
+
+        A = create_distr_matrix(A_global, ranks; assembled=false)
+        b = create_pvector(b_global, A)
+
+        @assert size(A_global, 2) == length(b_global)
+
+        state = initialize_state(A, b, tol=1e-8, max_iter=30)
+        x, iter = solve_bicgstab!(state)
+        tol = 1e-8
+        x_vec = collect(x)
+        expected = A_global \ b_global
+        @test isapprox(x_vec, expected; atol=tol, rtol=0)
+
+    end
+
+    @testset "Test 2: singular" begin
+        b_global = Float64[1, 1]
+        A_global = Float64[1 1; 1 1]
+
+        A = create_distr_matrix(A_global, ranks; assembled=false)
+        b = create_pvector(b_global, A)
+
+        @assert size(A_global, 2) == length(b_global)
+
+        state = initialize_state(A, b, tol=1e-8, max_iter=30)
+        x, iter = solve_bicgstab!(state)
+        tol = 1e-8
+        x_vec = collect(x)
+        @test norm(A_global * x_vec - b_global) <= tol
+    end
+
+    @testset "Test 5: a 3x3 system" begin
+        A_global = [3.0 2.0 -1.0;
+            2.0 -2.0 4.0;
+            -1.0 0.5 -1.0]
+        b_global = [1.0, -2.0, 0.0]
+
+        A = create_distr_matrix(A_global, ranks; assembled=false)
+        b= create_pvector(b_global, A)
+
+        state = initialize_state(A, b, tol=tol, max_iter=max_iter)
+        x, iters = solve_bicgstab!(state)
+        x_expected = A_global \ b_global
+
+        x_vec = collect(x)
+        @test isapprox(x_vec, x_expected; atol=tol, rtol=0)
+        @test iters < max_iter
+        @test norm(A_global * x_vec - b_global) < tol
+    end
+end
