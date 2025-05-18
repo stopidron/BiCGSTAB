@@ -34,7 +34,7 @@ function initialize_state(A::AbstractMatrix, b::AbstractVector; tol=1e-8, max_it
 
   #r_hat = prand(b)
   r_hat = similar(b, T)
-  copyto!(r_hat, b)
+  copyto!(r_hat, r)
 
 
   p     = similar(b, T); p .= zero(T)
@@ -96,7 +96,6 @@ function step!(state, iter)
 
   #----------------------------------------
   
-
   # state.v .= A * state.p
   mul!(state.v, A, state.p)
 
@@ -146,7 +145,6 @@ function step!(state, iter)
   # if i_am_main(state.r)#TODO 😱😱😱😱😱😱
   #   println("Iter: $iter, Rank Main: omega = $(state.omega)")
   # end
-    
 
   copyto!(state.x, state.h)
   LinearAlgebra.axpy!(state.omega, state.s, state.x)
