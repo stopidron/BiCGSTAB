@@ -27,7 +27,7 @@ function initialize_state(A::AbstractMatrix, b::AbstractVector; tol=1e-8, max_it
 
   T = eltype(A) 
   @assert eltype(b) == T 
-  x = similar(b, T); x .= zero(T) #TODO might not work
+  x = similar(b, T); x .= zero(T) 
   r = copy(b)
 
   #r .-= A * x :not needed
@@ -65,9 +65,9 @@ function update_p!(state, rho_new, iter)
       beta = (rho_new / state.rho_old) * (state.alpha / state.omega)
 
       tmp = copy(state.p) #temp = step.p 
-      LinearAlgebra.axpy!(-state.omega, state.v, tmp) #tmp = -o*v+p
+      axpy!(-state.omega, state.v, tmp) #tmp = -o*v+p
       copyto!(state.p, state.r) #p=r
-      LinearAlgebra.axpy!(beta, tmp, state.p) #p (aka r) =beta*tmp + p 
+      axpy!(beta, tmp, state.p) #p (aka r) =beta*tmp + p 
 
      #state.p .= state.r .+ beta .* (state.p .- state.omega .* state.v)
   end
@@ -79,7 +79,7 @@ function step!(state, iter)
   r = state.r
 
   #rho_new = dot(r_hat, r)
-  rho_new = LinearAlgebra.dot(r_hat, r) #TODO maybe not needed
+  rho_new = dot(r_hat, r) #TODO maybe not needed
   # if PartitionedArrays.i_am_main(r) # Use any PVector from state for i_am_main
   #   println("Iter: $iter, Rank Main: rho_new = $rho_new")
   # end
@@ -111,7 +111,7 @@ function step!(state, iter)
   # end
   # state.alpha = rho_new / dot_rhat_v
   
-  state.alpha = rho_new / LinearAlgebra.dot(r_hat, state.v)#TODO maybe not needed
+  state.alpha = rho_new / dot(r_hat, state.v)#TODO maybe not needed
   #state.alpha = rho_new / dot(r_hat, state.v) TODO 
 
   # if i_am_main(state.r)#TODO 😱😱😱😱😱😱
@@ -119,14 +119,14 @@ function step!(state, iter)
   # end
 
   copyto!(state.h, state.x)
-  LinearAlgebra.axpy!(state.alpha, state.p, state.h)
+  axpy!(state.alpha, state.p, state.h)
   #state.h .= state.x .+ state.alpha .* state.p TODO check 
 
   copyto!(state.s, state.r)
-  LinearAlgebra.axpy!(-state.alpha, state.v, state.s)
+  axpy!(-state.alpha, state.v, state.s)
   #state.s .= state.r .- state.alpha .* state.v TODO
 
-  norm_s = LinearAlgebra.norm(state.s)
+  norm_s = norm(state.s)
   if norm_s < state.tol
     state.x .= state.h
     return true 
@@ -135,31 +135,31 @@ function step!(state, iter)
   mul!(state.t, A, state.s)
   # state.t .= A * state.s
 
-  denom = LinearAlgebra.dot(state.t, state.t) #TODO
+  denom = dot(state.t, state.t) #TODO
   if denom == 0.0
       error("Breakdown: t ⋅ t == 0")
   end
 
-  state.omega = LinearAlgebra.dot(state.t, state.s) / denom #TODO
+  state.omega = dot(state.t, state.s) / denom #TODO
 
   # if i_am_main(state.r)#TODO 😱😱😱😱😱😱
   #   println("Iter: $iter, Rank Main: omega = $(state.omega)")
   # end
 
   copyto!(state.x, state.h)
-  LinearAlgebra.axpy!(state.omega, state.s, state.x)
+  axpy!(state.omega, state.s, state.x)
   #state.x .= state.h .+ state.omega .* state.s
 
   copyto!(state.r, state.s)
-  LinearAlgebra.axpy!(-state.omega, state.t, state.r)
+  axpy!(-state.omega, state.t, state.r)
   #state.r .= state.s .- state.omega .* state.t
   state.rho_old = rho_new
 
-  return LinearAlgebra.norm(state.r) < state.tol #TODO
+  return norm(state.r) < state.tol #TODO
 end
 
 function solve_bicgstab!(state)
-  norm_r = LinearAlgebra.norm(state.r)
+  norm_r = norm(state.r)
 
   if i_am_main(state.r) 
      if norm_r < state.tol
